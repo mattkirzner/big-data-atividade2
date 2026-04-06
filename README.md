@@ -60,7 +60,7 @@ Dica de Analista: Em cenários de Big Data, se o volume de países e indicadores
 
 - Allan Ronald Vasconcelos
 - Matheus Rangel Kirzner
-- Julia Oliveira Veríssimo
+- Júlia Oliveira Veríssimo
 
 
 ***
