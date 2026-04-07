@@ -60,32 +60,14 @@ DB_URL = os.getenv("DB_URL")
 def main():
     atlas = Atlas(DB_USER, DB_PASSWORD, DB_URL)
 
-    # Principais códigos de modalidade (conforme Manual de Consultas, seção 5.2):
-    # 6: Pregão Eletrônico
-    # 8: Dispensa de Licitação
-    # 9: Inexigibilidade
-    # 10: Manifestação de Interesse
+    DB_NAME = "PNCP"
+    COL_NAME = "contratacoes"
 
-    MODALIDADE = 6  # Vamos testar com Pregão Eletrônico
-    DATA_INI = "20240101"
-    DATA_FIM = "20240102"
+    # print(atlas.read_data(DB_NAME,COL_NAME,{"numeroControlePNCP":"01612612000106-1-000001/2024"}))
 
-    print(f"Consultando Modalidade {MODALIDADE} entre {DATA_INI} e {DATA_FIM}...")
-    resultado = consultar_pncp(DATA_INI, DATA_FIM, MODALIDADE)
+    # atlas.update_by_pncp_id(DB_NAME,COL_NAME, "01612612000106-1-000001/2024", {"orgaoEntidade.razaoSocial":"Onde judas perdeu as botas"})
 
-    atlas.upload_pncp_data("PNCP", "contratacoes", resultado)
-
-    # if resultado and 'data' in resultado:
-    #     for item in resultado['data']:
-    #         # Tratamento para evitar o erro de NoneType (subscriptable)
-    #         objeto = item.get('objeto') or "Objeto não informado"
-    #         numero_pncp = item.get('numeroControlePNCP')
-
-    #         print(f"Número PNCP: {numero_pncp}")
-    #         print(f"Objeto: {objeto[:100]}...")
-    #         print("-" * 30)
-    # else:
-    #     print("Nenhum dado encontrado ou erro na resposta.")
+    atlas.delete_by_pncp_id(DB_NAME, COL_NAME, "01612612000106-1-000001/2024")
 
 
 if __name__ == "__main__":

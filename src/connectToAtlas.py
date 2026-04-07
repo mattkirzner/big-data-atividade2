@@ -2,23 +2,27 @@
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from pymongo.errors import ConnectionFailure
+from pymongo.errors import PyMongoError
 
 
 class ConnectToAtlas:
-    # Atributo de classe para armazenar a única instância
     _instance = None
     _client = None
 
     def __new__(cls, user: str, password: str, url: str):
-        # Se a instância ainda não existe, cria ela
+        """
+        Gerenciador Singleton para operações no MongoDB Atlas.
+
+        Esta classe garante que apenas uma conexão com o cluster seja mantida
+        ativa, otimizando o uso de recursos e performance.
+        """
+
         if cls._instance is None:
             cls._instance = super(ConnectToAtlas, cls).__new__(cls)
 
-            # Monta a URI e cria o client apenas uma vez
             uri = f"mongodb+srv://{user}:{password}@{url}"
             try:
                 cls._client = MongoClient(uri, server_api=ServerApi("1"))
-                # Opcional: Testa a conexão imediatamente
                 cls._client.admin.command("ping")
                 print("Instância única do MongoDB Atlas criada!")
             except ConnectionFailure as e:
@@ -28,12 +32,30 @@ class ConnectToAtlas:
         return cls._instance
 
     def __init__(self, user: str, password: str, url: str):
+        """
+        Inicializa a conexão com o MongoDB Atlas.
+
+        Args:
+            user (str): Nome de usuário do banco de dados (configurado no Database Access).
+            password (str): Senha do usuário. Note que caracteres especiais devem estar URL-encoded.
+            url (str): Endereço do cluster (ex: 'cluster0.XXXXXXX.mongodb.net/?appName=Cluster0').
+                      Não deve incluir o prefixo 'mongodb+srv://'.
+        """
         self.client = self._client
 
     def upload_pncp_data(self, db_name: str, collection_name: str, json_content: dict):
         """
-        Extrai a lista de 'data' do JSON e faz o upload em lote.
+        Extrai a lista de 'data' do JSON do PNCP e faz o upload em lote para o AtlasDB.
+
+        Args:
+            db_name(str): nome do banco de dados.
+            collection_name(str): nome da coleção.
+            json_content(list[dict]): lista com os dados a serem inseridos.
+
+        Return:
+            list[dict]: uma lista com os ids inseridos.
         """
+
         try:
             # Extraímos apenas a lista de registros
             records = json_content.get("data", [])
@@ -55,16 +77,87 @@ class ConnectToAtlas:
             print(f"Erro ao subir dados para o Atlas: {e}")
             return None
 
-    def getMovieByTitle(self, dbName: str, collectionName: str, movieTitle: str):
+    def read_data(
+        self, db_name: str, collection_name: str, query: dict = None, limit: int = 0
+    ):
         """
-        Busca
+        Busca documentos baseados em um filtro.
+
+        Args:
+            db_name (str): Nome do banco de dados no Atlas.
+            collection_name(str): nome da coleção.
+            query (dict, optional): Filtro de busca no formato MONGODB.
+                Exemplo de query: {"orgaoEntidade.cnpj": "01612612000106"}
+                Se não fornecido, retorna todos os documentos. Defaults to None.
+            limit (int, optional): Número máximo de documentos a retornar.
+                Não usar retorna todos os documentos encontrados.
+                Defaults to 0.
+
+        Returns:
+            list[dict]: lista com os documentos encontrado.
         """
-        db = self.client[dbName]
-        collection = db[collectionName]
-        achados = collection.find({"title": movieTitle})
-        resultado = []
+        try:
+            db = self.client[db_name]
+            # O limit(0) no PyMongo retorna todos os documentos
+            cursor = db[collection_name].find(query or {}).limit(limit)
+            return list(cursor)
+        except PyMongoError as e:
+            print(f"Erro na leitura: {e}")
+            return []
 
-        for filme in achados:
-            resultado.append({"nome": filme["title"], "ano": filme["year"]})
+    def update_by_pncp_id(
+        self, db_name: str, collection_name: str, pncp_id: str, new_data: dict
+    ):
+        """
+        Atualiza um registro específico usando o numeroControlePNCP.
 
-        return resultado
+        Args:
+            db_name(str): nome do banco de dados.
+            collection_name(str): nome da coleção.
+            pncp_id(str): id do numeroControlePNCP.
+            new_data(list[dict]): query a ser atualizada
+                (ex: {"orgaoEntidade.razaoSocial":"Cesar School"}).
+
+        Returns:
+            (str): mensagem com o resultado da operação.
+        """
+        try:
+            db = self.client[db_name]
+            # O filtro é fixo no identificador único
+            query = {"numeroControlePNCP": pncp_id}
+
+            # Usamos update_one para garantir que apenas um registro seja afetado
+            result = db[collection_name].update_one(query, {"$set": new_data})
+
+            if result.matched_count > 0:
+                return f"Sucesso: Registro {pncp_id} atualizado."
+            else:
+                return f"Aviso: Nenhum registro encontrado com o ID {pncp_id}."
+        except PyMongoError as e:
+            return f"Erro no update: {e}"
+
+    def delete_by_pncp_id(self, db_name: str, collection_name: str, pncp_id: str):
+        """
+        Remove um registro específico usando o numeroControlePNCP.
+
+        Args:
+            db_name(str): nome do banco de dados.
+            collection_name(str): nome da coleção.
+            pncp_id(str): id do numeroControlePNCP.
+
+        Returns:
+            (str): mensagem com o resultado da operação.
+        """
+        try:
+            db = self.client[db_name]
+            query = {"numeroControlePNCP": pncp_id}
+
+            # delete_one é mais seguro aqui para evitar remoções em massa
+            result = db[collection_name].delete_one(query)
+
+            if result.deleted_count > 0:
+                return f"Sucesso: Registro {pncp_id} removido."
+            else:
+                return f"Aviso: Registro {pncp_id} não encontrado para exclusão."
+        except PyMongoError as e:
+            return f"Erro na remoção: {e}"
