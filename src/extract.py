@@ -2,6 +2,7 @@ import requests
 
 
 class Extract:
+    session = requests.Session()
 
     def __init__(self):
         pass
@@ -11,6 +12,8 @@ class Extract:
         data_inicial: str,
         data_final: str,
         codigo_modalidade_contratacao: int,
+        pagina: int = 1,
+        tamanhoPagina: int = 10,
         codigo_modo_disputa: int = None,
         uf: str = None,
         codigo_municipio_ibge: str = None,
@@ -22,6 +25,8 @@ class Extract:
             data_inicial (str): Data inicial no formato YYYYMMDD.
             data_final (str): Data final no formato YYYYMMDD.
             codigo_modalidade_contratacao (int): Código da modalidade de contratação (obrigatório).
+            pagina (int): Página a ser vizualizada (default = 1).
+            tamanhoPagina (int) : tamanho da página (default = 10)
             codigo_modo_disputa (int, optional): Código do modo de disputa.
             uf (str, optional): Sigla do estado (ex: "PE").
             codigo_municipio_ibge (str, optional): Código IBGE do município.
@@ -34,7 +39,8 @@ class Extract:
             "dataInicial": data_inicial,
             "dataFinal": data_final,
             "codigoModalidadeContratacao": codigo_modalidade_contratacao,
-            "pagina": 1,
+            "pagina": pagina,
+            "tamanhoPagina": tamanhoPagina,
         }
         if codigo_modo_disputa is not None:
             params["codigoModoDisputa"] = codigo_modo_disputa
@@ -43,7 +49,7 @@ class Extract:
         if codigo_municipio_ibge is not None:
             params["codigoMunicipioIbge"] = codigo_municipio_ibge
 
-        response = requests.get(url, params=params)
+        response = self.session.get(url, params=params, timeout=30)
         response.raise_for_status()
         return response.json()
 

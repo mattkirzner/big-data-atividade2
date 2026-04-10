@@ -58,10 +58,25 @@ class ConnectToAtlas:
 
         try:
             # Extraímos apenas a lista de registros
-            records = json_content.get("data", [])
+            # records = json_content.get("data", [])
+
+            if isinstance(json_content, dict) and "data" in json_content:
+                records = json_content.get("data", [])
+
+            # Se já for uma lista (dados limpos), usamos diretamente.
+            elif isinstance(json_content, list):
+                records = json_content
+
+            # Caso contrário (ex: dicionário sem chave 'data'), tratamos como um único registro.
+            elif isinstance(json_content, dict):
+                records = [json_content]
+
+            else:
+                print("Formato de dados inválido.")
+                return None
 
             if not records:
-                print("Nenhum dado encontrado para upload.")
+                print("Nenhum registro encontrado para upload.")
                 return None
 
             db = self.client[db_name]
