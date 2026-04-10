@@ -1,70 +1,70 @@
-# | 📊 Data Engineering Challenge: JSON to Relational Persistence
+📊 Data Engineering: PNCP JSON to NoSQL Persistence
+❓ Sobre
 
-***
+Este repositório contém a solução para o desafio de persistência de dados em larga escala, focado na ingestão de dados semiestruturados (JSON) provenientes do PNCP (Portal Nacional de Contratações Públicas).
 
-## ❓ | Sobre 
+Originalmente concebido para uma transição relacional, o projeto foi otimizado para uma arquitetura NoSQL baseada em documentos, utilizando o MongoDB Atlas. Esta abordagem permite lidar com a natureza dinâmica das licitações, garantindo escalabilidade na nuvem e flexibilidade de esquema.
+📝 O Problema
 
-Projeto desenvolvido pela disciplina de Engenharia de Dados e Big Data. Este repositório contém a solução para o desafio de persistência de dados em larga escala, focado na transição de dados semiestruturados (JSON) para um ambiente relacional robusto (SQL). O projeto foi desenvolvido sob a ótica de um Desenvolvedor de Software e Analista de Sistemas, visando escalabilidade e integridade.
+O cenário envolve o consumo de APIs que fornecem dados complexos de compras públicas. Os principais desafios endereçados são:
 
-***
+    Gerenciamento de Recursos: Evitar o esgotamento de conexões no cluster através do padrão Singleton.
 
-## | 📝 O Problema
-O cenário proposto envolve o consumo de uma API que fornece dados globais. O desafio consiste em:
+    Integridade e Idempotência: Garantir que re-processamentos não gerem duplicidade de registros.
 
-Modelar um esquema de banco de dados eficiente.
+    Polimorfismo de Dados: Capacidade de processar tanto o JSON bruto (raw) quanto dados transformados (refined).
 
-Estrategizar a ingestão de dados de múltiplos países, garantindo que o sistema não se torne um "pesadelo de manutenção" à medida que o volume cresce.
+🛠️ 1. Arquitetura de Software
 
-## | 🛠️ 1. Modelagem de Dados
-Para garantir a normalização e evitar a redundância, propomos um modelo dividido em duas tabelas principais. Esta estrutura permite que informações estáticas dos países fiquem separadas das métricas voláteis.
+A solução foi construída em Python, implementando padrões de projeto para garantir robustez:
 
-## | 🚀 2. Estratégia de Ingestão e Consistência
-Lidar com dados de vários países exige uma estratégia que equilibre desempenho de escrita e velocidade de leitura. Abaixo, detalho a abordagem recomendada:
+    Padrão Singleton: Implementado na classe ConnectToAtlas para garantir que apenas uma instância do MongoClient seja utilizada em toda a aplicação, otimizando o pool de conexões.
 
-A. Particionamento de Dados
-Para garantir a performance de consulta em um histórico longo, a melhor estratégia é o Particionamento de Tabelas por Lista (List Partitioning) baseado no country_code ou por Intervalo (Range) baseado na reference_date.
+    CRUD Dinâmico: Métodos flexíveis que aceitam nomes de bancos e coleções como argumentos, permitindo que a mesma classe gerencie diferentes fluxos de dados.
 
-Vantagem: Consultas filtradas por país ou período realizarão o partition pruning, lendo apenas os arquivos/setores necessários no disco.
+    Encapsulamento: Tratamento de erros centralizado e uso de docstrings detalhadas para facilitar a manutenção.
 
-B. Estratégia "Upsert" (Idempotência)
-Como APIs podem ser chamadas múltiplas vezes para o mesmo período, utilizamos a lógica de UPSERT (Insert on Conflict Update).
+🚀 2. Estratégia de Ingestão e Consistência
 
-Isso garante que, se os dados de um país para uma data específica forem reprocessados, o registro existente será atualizado em vez de duplicado, mantendo a consistência do histórico.
+Diferente do modelo SQL rígido, adotamos uma estratégia de Schema-on-Read e Refining:
+A. Camadas de Dados
 
-C. Camada de Stage (Staging Area)
-Antes de persistir na tabela final, os dados do JSON são carregados em uma tabela temporária de "Stage".
+    Raw Layer (Bruto): Armazena o JSON completo vindo da API, preservando a fidelidade do dado original.
 
-Validação: Verificamos tipos de dados e valores nulos.
+    Refined Layer (Limpo): Dados transformados, com campos "achatados" (flattened) e filtrados para facilitar a visualização no front-end e dashboards.
 
-Enriquecimento: Validamos se o country_code já existe na dim_countries.
+B. Estratégia "Upsert" (A ser implementada)
 
-Carga: Movemos os dados validados para a fact_indicators.
+Para evitar duplicidade, utilizamos o campo de negócio numeroControlePNCP como chave primária lógica. 
 
-D. Manutenibilidade e Escalabilidade
-Indexação: Criação de índices B-Tree no campo reference_date e índices compostos em (country_code, indicator_name).
+    Idempotência: As funções de upload verificam a existência do ID único.
 
-Paralelismo: A ingestão pode ser feita em threads separadas por região geográfica, acelerando o processo de carga sem travar a tabela inteira.
+    Consistência: Atualização de registros existentes em vez de criação de novos, mantendo o histórico limpo.
 
-## ❓ | 🛠️ Tecnologias Utilizadas & Sugeridas
+C. Otimização de Performance
 
-*** 
-Linguagem: Python (Pandas/SQLAlchemy) para o parser do JSON.
+    Inserção em Lote (Bulk Insert): Uso de insert_many para reduzir o tráfego de rede com o cluster Atlas.
 
-Banco de Dados: PostgreSQL (pelo suporte nativo a JSONB e particionamento).
+    Indexação: Recomendação de índices únicos no campo numeroControlePNCP para garantir buscas instantâneas.
 
-Orquestração: Airflow ou Prefect (para agendar as extrações da API).
+🛠️ Tecnologias Utilizadas
 
-Dica de Analista: Em cenários de Big Data, se o volume de países e indicadores crescer exponencialmente, considere evoluir essa modelagem para um Data Lakehouse, onde o JSON bruto é armazenado em camadas (Bronze) e a modelagem relacional reside na camada de consumo (Gold).
+    Linguagem: Python 3.x
 
-## 👥 | Equipe
+    Banco de Dados: MongoDB Atlas
 
-- Allan Ronald Vasconcelos
-- Matheus Rangel Kirzner
-- Júlia Oliveira Veríssimo
+    Driver: PyMongo
 
+    Formatos: JSON / BSON
 
-***
+👥 Equipe
 
-## 📜 | Licença 
+    Allan Ronald Vasconcelos
 
-Este projeto está licenciado sob a licença MIT.
+    Matheus Rangel Kirzner
+
+    Júlia Oliveira Veríssimo
+
+📜 Licença
+
+Este projeto está licenciado sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
