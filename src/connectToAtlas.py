@@ -3,6 +3,7 @@ from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 from pymongo.errors import ConnectionFailure
 from pymongo.errors import PyMongoError
+from pymongo import UpdateOne
 
 
 class ConnectToAtlas:
@@ -43,9 +44,9 @@ class ConnectToAtlas:
         """
         self.client = self._client
 
-    def upload_pncp_data(self, db_name: str, collection_name: str, json_content: dict):
+    def upload_pncp_data(self, db_name: str, collection_name: str, json_content):
         """
-        Extrai a lista de 'data' do JSON do PNCP e faz o upload em lote para o AtlasDB.
+        Faz upload em lote para o AtlasDB, sem duplicações com base no "numeroControlePNCP".
 
         Args:
             db_name(str): nome do banco de dados.
@@ -55,42 +56,116 @@ class ConnectToAtlas:
         Return:
             list[dict]: uma lista com os ids inseridos.
         """
-
         try:
-            # Extraímos apenas a lista de registros
-            # records = json_content.get("data", [])
+            print("Iniciando processo de upload...")
 
-            if isinstance(json_content, dict) and "data" in json_content:
-                records = json_content.get("data", [])
-
-            # Se já for uma lista (dados limpos), usamos diretamente.
+            # 1. Extração da lista de registros (suporta dict com chave 'data' ou lista direta)
+            records = []
+            if isinstance(json_content, dict):
+                records = json_content.get(
+                    "data", [json_content] if json_content else []
+                )
             elif isinstance(json_content, list):
                 records = json_content
 
-            # Caso contrário (ex: dicionário sem chave 'data'), tratamos como um único registro.
-            elif isinstance(json_content, dict):
-                records = [json_content]
-
-            else:
-                print("Formato de dados inválido.")
-                return None
-
             if not records:
-                print("Nenhum registro encontrado para upload.")
+                print("Nenhum registro encontrado para processar.")
                 return None
 
             db = self.client[db_name]
             collection = db[collection_name]
 
-            # insert_many é muito mais rápido para listas
-            result = collection.insert_many(records)
+            operacoes = []
+            for doc in records:
+                # 2. Identificação Flexível do ID
+                # Prioriza 'id' (seu dado limpo) e depois 'numeroControlePNCP' (dado bruto)
+                id_referencia = doc.get("id") or doc.get("numeroControlePNCP")
 
-            print(f"Sucesso! {len(result.inserted_ids)} documentos inseridos.")
-            return result.inserted_ids
+                if id_referencia:
+                    operacoes.append(
+                        UpdateOne(
+                            {
+                                "numeroControlePNCP": id_referencia
+                            },  # Filtro único, salva como "numenumeroControlePNCP"
+                            # para garantir compatibilidade com as outras funções
+                            {
+                                "$set": doc,
+                            },
+                            upsert=True,
+                        )
+                    )
+                else:
+                    # Log de debug para identificar registros sem identificador
+                    print(f"⚠️ Registro ignorado (sem ID): {str(doc)[:80]}...")
+
+            # 3. Execução em lote
+            if operacoes:
+                print(
+                    f"Enviando {len(operacoes)} registros para {db_name}.{collection_name}..."
+                )
+                result = collection.bulk_write(operacoes)
+
+                print(f"Processamento concluído!")
+                print(f"   - Inseridos (Novos): {result.upserted_count}")
+                print(f"   - Atualizados (Já existiam): {result.modified_count}")
+
+                return result.upserted_ids
+            else:
+                print("Nenhuma operação válida gerada.")
+                return None
 
         except Exception as e:
-            print(f"Erro ao subir dados para o Atlas: {e}")
+            print(f"Erro no upload para o Atlas: {e}")
             return None
+
+    # def upload_pncp_data(self, db_name: str, collection_name: str, json_content: dict):
+    #     """
+    #     Extrai a lista de 'data' do JSON do PNCP e faz o upload em lote para o AtlasDB.
+
+    #     Args:
+    #         db_name(str): nome do banco de dados.
+    #         collection_name(str): nome da coleção.
+    #         json_content(list[dict]): lista com os dados a serem inseridos.
+
+    #     Return:
+    #         list[dict]: uma lista com os ids inseridos.
+    #     """
+
+    #     try:
+    #         # Extraímos apenas a lista de registros
+    #         # records = json_content.get("data", [])
+
+    #         if isinstance(json_content, dict) and "data" in json_content:
+    #             records = json_content.get("data", [])
+
+    #         # Se já for uma lista (dados limpos), usamos diretamente.
+    #         elif isinstance(json_content, list):
+    #             records = json_content
+
+    #         # Caso contrário (ex: dicionário sem chave 'data'), tratamos como um único registro.
+    #         elif isinstance(json_content, dict):
+    #             records = [json_content]
+
+    #         else:
+    #             print("Formato de dados inválido.")
+    #             return None
+
+    #         if not records:
+    #             print("Nenhum registro encontrado para upload.")
+    #             return None
+
+    #         db = self.client[db_name]
+    #         collection = db[collection_name]
+
+    #         # insert_many é muito mais rápido para listas
+    #         result = collection.insert_many(records)
+
+    #         print(f"Sucesso! {len(result.inserted_ids)} documentos inseridos.")
+    #         return result.inserted_ids
+
+    #     except Exception as e:
+    #         print(f"Erro ao subir dados para o Atlas: {e}")
+    #         return None
 
     def read_data(
         self, db_name: str, collection_name: str, query: dict = None, limit: int = 0
