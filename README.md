@@ -47,7 +47,7 @@ Diferente do modelo SQL rígido, adotamos uma estratégia de **Schema-on-Read** 
 
 ---
 
-### B. Estratégia "Upsert" (A ser implementado)
+### B. Estratégia "Upsert" 
 
 Para evitar duplicidade, utilizamos o campo de negócio `numeroControlePNCP` como chave primária lógica.
 
@@ -66,6 +66,13 @@ Para evitar duplicidade, utilizamos o campo de negócio `numeroControlePNCP` com
 
 - ⚡ **Indexação**  
   Recomendação de índices únicos no campo `numeroControlePNCP` para garantir buscas instantâneas.
+
+---
+
+### D. Orquestração
+
+- 🎼 **Prefect**  
+  O Prefect é usado para orquestrar as operações de ETL em um fluxo.
 
 ---
 
