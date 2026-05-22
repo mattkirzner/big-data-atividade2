@@ -3,13 +3,15 @@ from src import Extract
 from src import Transform
 from src import ConnectToAtlas as Atlas
 from dotenv import load_dotenv
+from pyspark.sql import SparkSession
 import os
+
 
 load_dotenv()
 
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_URL = os.getenv("DB_URL")
+                                                                                                                             = os.getenv("DB_URL")
 
 extract_settings = {
     "data_inicial":"20250101",
@@ -78,3 +80,4 @@ def etl_atlas_flow():
 
 if __name__ == "__main__":
     etl_atlas_flow()
+    
