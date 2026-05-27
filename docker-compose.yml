@@ -1,0 +1,13 @@
+services:
+  spark:
+    build: .
+    container_name: pyspark_container
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./apps:/app  # Mapeia sua pasta local de scripts para dentro do /app do container
+      - ./src:/src
+    env_file:
+      - .env         # Passa as variáveis DB_USER, DB_PASSWORD e DB_URL para o container
+    environment:
+      - PYTHONPATH=$PYTHONPATH:/src
