@@ -4,3 +4,4 @@ universities.db
 .env
 __pycache__
 .vscode
+/apps/PNCP_LOCAL.db
