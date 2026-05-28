@@ -4,6 +4,9 @@ services:
     container_name: pyspark_container
     ports:
       - "4040:4040"
+      - "8501:8501"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./apps:/app  # Mapeia sua pasta local de scripts para dentro do /app do container
       - ./src:/src

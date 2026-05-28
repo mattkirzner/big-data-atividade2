@@ -15,7 +15,11 @@ RUN pip install --no-cache-dir \
     pyspark==3.5.0 \
     pymongo[srv]==4.6.1 \
     python-dotenv \
-    pandas
+    pandas \
+    streamlit \
+    openai \
+    fastmcp \
+    tabulate
 
 # 5. Define o diretório de trabalho padrão dentro do container
 WORKDIR /app
