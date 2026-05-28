@@ -1,99 +1,235 @@
-# 📊 Data Engineering: PNCP JSON to NoSQL Persistence
+# 📊 Data Engineering & GenAI: PNCP Hybrid Pipeline & Local Chatbot
 
-## ❓ Sobre
+## ❓ Sobre o Projeto
 
-Este repositório contém a solução para o desafio de persistência de dados em larga escala, focado na ingestão de dados semiestruturados (JSON) provenientes do **PNCP (Portal Nacional de Contratações Públicas)**.
+Este repositório contém uma solução de **Engenharia de Dados ponta a ponta** para ingestão, processamento analítico e consumo inteligente de dados semiestruturados (JSON) provenientes do **PNCP (Portal Nacional de Contratações Públicas)**.
 
-Originalmente concebido para uma transição relacional, o projeto foi otimizado para uma arquitetura **NoSQL baseada em documentos**, utilizando o **MongoDB Atlas**. Esta abordagem permite lidar com a natureza dinâmica das licitações, garantindo **escalabilidade na nuvem** e **flexibilidade de esquema**.
+### 🔄 Evolução da Arquitetura
 
----
+Originalmente focado apenas na ingestão e persistência de dados brutos e refinados no **MongoDB Atlas** utilizando Python nativo, o projeto evoluiu para uma **Arquitetura Híbrida Moderna**.
 
-## 📝 O Problema
+O ecossistema agora combina:
 
-O cenário envolve o consumo de APIs que fornecem dados complexos de compras públicas. Os principais desafios endereçados são:
-
-- ⚙️ **Gerenciamento de Recursos**: Evitar o esgotamento de conexões no cluster através do padrão *Singleton*.
-- 🔁 **Integridade e Idempotência**: Garantir que re-processamentos não gerem duplicidade de registros.
-- 🔀 **Polimorfismo de Dados**: Capacidade de processar tanto o JSON bruto (*raw*) quanto dados transformados (*refined*).
-
----
-
-## 🛠️ 1. Arquitetura de Software
-
-A solução foi construída em **Python**, implementando padrões de projeto para garantir robustez:
-
-- 🧩 **Padrão Singleton**  
-  Implementado na classe `ConnectToAtlas` para garantir que apenas uma instância do `MongoClient` seja utilizada em toda a aplicação, otimizando o pool de conexões.
-
-- 🔄 **CRUD Dinâmico**  
-  Métodos flexíveis que aceitam nomes de bancos e coleções como argumentos, permitindo que a mesma classe gerencie diferentes fluxos de dados.
-
-- 🔒 **Encapsulamento**  
-  Tratamento de erros centralizado e uso de *docstrings* detalhadas para facilitar a manutenção.
+- ⚡ **PySpark** para processamento distribuído de dados;
+- 🎯 **Prefect** para orquestração dos pipelines;
+- 🗄️ **MongoDB Atlas** para armazenamento da camada *Raw*;
+- 📊 **SQLite** para consultas analíticas locais;
+- 🤖 **Ollama + Llama 3.1** para IA Generativa local;
+- 🔗 **FastMCP** para integração entre o modelo de linguagem e o banco de dados;
+- 🌐 **Streamlit** para interface conversacional.
 
 ---
 
-## 🚀 2. Estratégia de Ingestão e Consistência
+## 🏗️ Arquitetura da Solução
 
-Diferente do modelo SQL rígido, adotamos uma estratégia de **Schema-on-Read** e **Refining**.
+```text
+[API do PNCP]
+       │
+       ▼
+[Prefect Orquestrador]
+       │
+       ▼
+[MongoDB Atlas (Raw)]
+       │
+       ▼
+[PySpark Engine (Tratamento)]
+       │
+       ▼
+[SQLite Local]
+       │
+       ▼
+[Llama 3.1 + FastMCP]
+       │
+       ▼
+[Streamlit Chatbot]
+```
 
-### A. Camadas de Dados
+### Fluxo de Dados
 
-- 🟡 **Raw Layer (Bruto)**  
-  Armazena o JSON completo vindo da API, preservando a fidelidade do dado original.
+#### 1️⃣ Ingestão (Cérebro Leve)
 
-- 🟢 **Refined Layer (Limpo)**  
-  Dados transformados, com campos *flattened* (achatados) e filtrados para facilitar a visualização no front-end e dashboards.
+O **Prefect** gerencia a extração dos dados da API do PNCP e armazena os documentos JSON brutos na camada **Raw** do MongoDB Atlas.
+
+#### 2️⃣ Processamento Analítico (Músculo Pesado)
+
+O **PySpark** realiza:
+
+- Leitura dos dados do Atlas;
+- Aplicação de esquemas rígidos (`StructType`);
+- Tratamento de valores nulos;
+- Padronização de campos;
+- Higienização de estruturas dinâmicas.
+
+#### 3️⃣ Persistência Analítica
+
+Os dados processados são convertidos e persistidos em uma base local **SQLite (`PNCP_LOCAL.db`)**, reduzindo custos de infraestrutura e melhorando a velocidade das consultas.
+
+#### 4️⃣ Interface Conversacional (GenAI)
+
+Um aplicativo **Streamlit** se conecta a um servidor **FastMCP**, permitindo que o usuário consulte os dados utilizando linguagem natural.
+
+O modelo **Llama 3.1**, executado localmente via **Ollama**, interpreta as perguntas e consulta o banco quando necessário.
 
 ---
 
-### B. Estratégia "Upsert" 
+## 🚀 Estratégia de Engenharia de Dados e Consistência
 
-Para evitar duplicidade, utilizamos o campo de negócio `numeroControlePNCP` como chave primária lógica.
+### A. Tipagem Estrita e Limpeza com PySpark
 
-- ♻️ **Idempotência**  
-  As funções de upload verificam a existência do ID único.
+Para lidar com inconsistências comuns em APIs governamentais, o pipeline utiliza um esquema rígido:
 
-- 🔄 **Consistência**  
-  Atualização de registros existentes em vez de criação de novos, mantendo o histórico limpo.
-
----
-
-### C. Otimização de Performance
-
-- 📦 **Inserção em Lote (Bulk Insert)**  
-  Uso de `insert_many` para reduzir o tráfego de rede com o cluster Atlas.
-
-- ⚡ **Indexação**  
-  Recomendação de índices únicos no campo `numeroControlePNCP` para garantir buscas instantâneas.
+| Campo | Tipo | Descrição |
+|---------|---------|---------|
+| `numeroControlePNCP` | StringType | Chave lógica de negócio |
+| `uf` | StringType | Unidade Federativa |
+| `municipio` | StringType | Município |
+| `modalidade` | StringType | Modalidade da compra |
+| `valorTotalHomologado` | DoubleType | Valor homologado tratado |
+| `anoCompra` | IntegerType | Ano extraído da publicação |
 
 ---
 
-### D. Orquestração
+### B. Monitoramento com Spark UI
 
-- 🎼 **Prefect**  
-  O Prefect é usado para orquestrar as operações de ETL em um fluxo.
+O processamento utiliza anotações customizadas para facilitar a observabilidade.
+
+Isso permite acompanhar:
+
+- Amostragem dos dados;
+- Agrupamentos por UF;
+- Persistência em SQLite;
+- Tempo de execução das operações.
+
+A interface pode ser acessada em:
+
+```text
+http://localhost:4040
+```
+
+---
+
+## 🤖 Camada de IA Conversacional Local (MCP)
+
+O projeto adota uma abordagem de **Agentic RAG Local**, eliminando dependência de APIs externas pagas.
+
+### Ollama + Llama 3.1
+
+Responsável por:
+
+- Compreender perguntas em linguagem natural;
+- Interpretar o contexto dos dados;
+- Gerar respostas em português.
+
+### FastMCP (Tool Calling)
+
+O FastMCP expõe ferramentas Python para o modelo de linguagem.
+
+Quando necessário, o Llama:
+
+1. Decide consultar o banco;
+2. Gera uma consulta SQL;
+3. Executa a consulta no SQLite;
+4. Interpreta os resultados;
+5. Retorna uma resposta amigável ao usuário.
 
 ---
 
 ## 🛠️ Tecnologias Utilizadas
 
-- 🐍 **Linguagem**: Python 3.x  
-- 🍃 **Banco de Dados**: MongoDB Atlas  
-- 🔌 **Driver**: PyMongo  
-- 📄 **Formatos**: JSON / BSON  
+| Categoria | Tecnologia |
+|------------|------------|
+| Linguagem | Python 3.11 |
+| Processamento | PySpark 3.5 |
+| Orquestração | Prefect |
+| Banco NoSQL | MongoDB Atlas |
+| Driver MongoDB | PyMongo |
+| Banco Analítico | SQLite3 |
+| Manipulação de Dados | Pandas |
+| Interface Web | Streamlit |
+| Protocolo de IA | FastMCP |
+| IA Local | Ollama |
+| Modelo LLM | Llama 3.1 |
+| Containers | Docker & Docker Compose |
+
+---
+
+## 📦 Como Executar o Projeto
+
+### 1. Pré-requisitos
+
+Instale:
+
+- Docker
+- Docker Compose
+- Ollama
+
+Depois baixe o modelo utilizado:
+
+```bash
+ollama run llama3.1
+```
+
+### 2. Configuração das Variáveis de Ambiente
+
+Crie um arquivo `.env` na raiz do projeto:
+
+```env
+DB_USER=seu_usuario
+DB_PASSWORD=sua_senha
+DB_URL=seu_cluster.mongodb.net
+```
+
+### 3. Construção e Inicialização dos Containers
+
+```bash
+docker compose up -d --build
+```
+
+### 4. Executar o Pipeline Spark
+
+```bash
+docker exec -it pyspark_container spark-submit /app/processa_pncp2.py
+```
+
+### 5. Inicializar o Chatbot Conversacional
+
+```bash
+docker exec -it pyspark_container streamlit run /app/app_chatbot_llama3.py --server.address=0.0.0.0
+```
+
+### 6. Acessar a Aplicação
+
+```text
+http://localhost:8501
+```
+
+---
+
+## 📂 Estrutura Geral do Projeto
+
+```text
+.
+├── app_chatbot_llama3.py
+├── processa_pncp2.py
+├── docker-compose.yml
+├── .env
+├── PNCP_LOCAL.db
+├── requirements.txt
+└── README.md
+```
 
 ---
 
 ## 👥 Equipe
 
-- Allan Ronald Vasconcelos  
-- Matheus Rangel Kirzner  
-- Júlia Oliveira Veríssimo  
+- Allan Ronald Vasconcelos
+- Matheus Rangel Kirzner
+- Júlia Oliveira Veríssimo
 
 ---
 
 ## 📜 Licença
 
-Este projeto está licenciado sob a licença **MIT**.  
-Veja o arquivo `LICENSE` para mais detalhes.
+Este projeto está licenciado sob a licença **MIT**.
+
+Consulte o arquivo `LICENSE` para mais informações.
