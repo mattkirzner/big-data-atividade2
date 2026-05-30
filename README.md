@@ -188,7 +188,7 @@ docker compose up -d --build
 ### 4. Executar o Pipeline Spark
 
 ```bash
-docker exec -it pyspark_container spark-submit /app/processa_pncp2.py
+docker exec -it pyspark_container spark-submit /app/spark_pncp.py
 ```
 
 ### 5. Inicializar o Chatbot Conversacional
