@@ -27,7 +27,6 @@ def main():
     DB_NAME = "PNCP"
     COL_NAME = "contratacoesLimpo"
 
-   
     atlas.upload_pncp_data(DB_NAME, COL_NAME, dadosLimpos)
 
 

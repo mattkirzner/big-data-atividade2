@@ -1,111 +1,227 @@
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-from connectToAtlas import ConnectToAtlas # Ligação com a pasta src feita pelo docker compose
 import os
 import sqlite3
+from pyspark.sql import SparkSession
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    DoubleType,
+    IntegerType,
+)
+from connectToAtlas import ConnectToAtlas
 
-# 1. Resgata as variáveis de ambiente
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_URL = os.getenv("DB_URL")
 
-print("🔌 Conectando ao MongoDB Atlas via PyMongo...")
-atlas = ConnectToAtlas(user=DB_USER, password=DB_PASSWORD, url=DB_URL)
-dados_puros = atlas.read_data(db_name="PNCP", collection_name="prefect_teste")
+class PNCPSparkPipeline:
+    def __init__(self, atlas_connection):
+        """
+        Inicializa o pipeline com os parâmetros dinâmicos de origem (Atlas) e destino (SQLite).
 
-# 🔍 DIAGNÓSTICO: Mostra exatamente como as chaves vieram do Atlas no primeiro registo
-if dados_puros:
-    print("\n🔬 [DIAGNÓSTICO] Chaves reais detetadas no primeiro documento do MongoDB:")
-    print(dados_puros[0].keys())
-    print("----------------------------------------------------------------------\n")
+        Args:
+            atlas_connection (ConnectToAtlas): Instância configurada do objeto de conexão
+                customizado para o MongoDB Atlas.
+        """
+        self.atlas = atlas_connection
+        self.spark = None
 
-print("🧹 Limpando chaves e mapeando dicionários de forma tolerante...")
-dados_tratados = []
-for doc in dados_puros:
-    doc_limpo = {}
-    
-    # 💡 Mapeamento tolerante: Procura variações comuns de nomes que possam vir da API do PNCP
-    # Se no Mongo estiver diferente, adicionamos aqui a alternativa correspondente
-    
-    doc_limpo["numeroControlePNCP"] = doc.get("numeroControlePNCP") or ""
-    doc_limpo["uf"] = doc.get("uf") or ""
-    doc_limpo["municipio"] = doc.get("municipio") or ""
-    doc_limpo["modalidade"] = doc.get("modalidade") or ""
-    
-    # 💡 CORRIGIDO: No seu Mongo a chave chama-se 'valor'
-    v_total = doc.get("valor")
-    if v_total is not None:
-        try:
-            doc_limpo["valorTotalHomologado"] = float(v_total)
-        except (ValueError, TypeError):
-            doc_limpo["valorTotalHomologado"] = 0.0
-    else:
-        doc_limpo["valorTotalHomologado"] = 0.0
+    def _init_spark(self, collection_name="Generic"):
+        """
+        Método interno corrigido para inicializar a SparkSession com o nome dinâmico.
 
-    # 💡 CORRIGIDO: Como não há 'anoCompra', vamos extrair o ano da 'data_publicacao'
-    data_pub = doc.get("data_publicacao")  # Ex: "2025-02-15..."
-    if data_pub and len(str(data_pub)) >= 4:
-        try:
-            doc_limpo["anoCompra"] = int(str(data_pub)[:4]) # Pega os 4 primeiros dígitos (Ano)
-        except (ValueError, TypeError):
-            doc_limpo["anoCompra"] = 0
-    else:
-        doc_limpo["anoCompra"] = 0
-            
-    dados_tratados.append(doc_limpo)
+        Args:
+            collection_name (str, optional): Nome da coleção do MongoDB que batizará a
+                aplicação no Spark UI. O valor padrão é "Generic".
+        """
+        if not self.spark:
+            self.spark = (
+                SparkSession.builder.appName(f"Pipeline_{collection_name}")
+                .master("local[*]")
+                .getOrCreate()
+            )
 
-print(f"📦 {len(dados_tratados)} registos prontos. Inicializando motor Spark...")
+    def extract_and_clean(self, db_name, collection_name):
+        """
+        1. Extrai os dados do MongoDB Atlas e limpa as chaves (sem _id e id).
 
-# 3. Inicializa uma SparkSession pura
-spark = SparkSession.builder \
-    .appName("SparkMongoHibrido") \
-    .master("local[*]") \
-    .getOrCreate()
+        Args:
+            db_name (str): Nome do banco de dados alvo no MongoDB Atlas.
+            collection_name (str): Nome da coleção que contém os documentos brutos no MongoDB Atlas.
 
-# Schema rígido com os mesmos nomes exatos que inserimos no doc_limpo acima
-schema_definido = StructType([
-    StructField("numeroControlePNCP", StringType(), True),
-    StructField("uf", StringType(), True),
-    StructField("municipio", StringType(), True),
-    StructField("modalidade", StringType(), True),
-    StructField("valorTotalHomologado", DoubleType(), True), 
-    StructField("anoCompra", IntegerType(), True)           
-])
+        Returns:
+            list: Uma lista de dicionários Python purificados e padronizados, pronta para o Spark.
+        """
+        print(
+            f"🔌 Lendo dados da coleção '{collection_name}' na base de dados '{db_name}'..."
+        )
+        dados_puros = self.atlas.read_data(
+            db_name=db_name, collection_name=collection_name
+        )
 
-# 4. Transforma a lista em Spark DataFrame aplicando o Schema
-df = spark.createDataFrame(dados_tratados, schema=schema_definido)
+        if not dados_puros:
+            print("⚠️ Nenhum dado bruto encontrado no MongoDB Atlas.")
+            return []
 
-# 5. Exibindo os dados
-spark.sparkContext.setJobDescription("Ação: Exibir amostragem de dados do PNCP")
-print("🚀 Esquema mapeado com sucesso pelo PySpark:")
-df.printSchema()
-df.show(5, truncate=False)
+        print("🧹 Limpando chaves e aplicando mapeamento tolerante...")
+        dados_tratados = []
+        for doc in dados_puros:
+            doc_limpo = {}
 
-spark.sparkContext.setJobDescription("Métrica: Contagem de contratações agrupadas por UF")
-print("📊 Contagem de contratações por UF:")
-df.groupBy("uf").count().show()
+            numero_controle = doc.get("numeroControlePNCP")
+            doc_limpo["numeroControlePNCP"] = (
+                str(numero_controle).strip() if numero_controle else ""
+            )
+            doc_limpo["data_publicacao"] = doc.get("data_publicacao") or ""
+            doc_limpo["descricao"] = doc.get("descricao") or ""
+            doc_limpo["entidade"] = doc.get("entidade") or ""
+            doc_limpo["linkOrigem"] = doc.get("linkOrigem") or ""
+            doc_limpo["status"] = doc.get("status") or ""
+            doc_limpo["modalidade"] = doc.get("modalidade") or ""
+            doc_limpo["municipio"] = doc.get("municipio") or ""
+            doc_limpo["uf"] = doc.get("uf") or ""
 
-spark.sparkContext.setJobDescription("Persistência: Gravando dados tratados no SQLite local")
+            v_total = doc.get("valor")
+            if v_total is not None:
+                try:
+                    doc_limpo["valor"] = float(v_total)
+                except (ValueError, TypeError):
+                    doc_limpo["valor"] = 0.0
+            else:
+                doc_limpo["valor"] = 0.0
 
-# O caminho "/app" está mapeado no seu docker-compose.yml para a pasta local "./apps"
-caminho_banco_local = "/app/PNCP_LOCAL.db"
-print(f"💾 Salvando dados estruturados localmente em: {caminho_banco_local}...")
+            doc_limpo["valorTotalHomologado"] = doc_limpo["valor"]
 
-# Convertemos o Spark DataFrame final para Pandas para salvar de forma simples no SQLite
-df_pandas = df.toPandas()
+            if (
+                doc_limpo["data_publicacao"]
+                and len(str(doc_limpo["data_publicacao"])) >= 4
+            ):
+                try:
+                    doc_limpo["anoCompra"] = int(str(doc_limpo["data_publicacao"])[:4])
+                except (ValueError, TypeError):
+                    doc_limpo["anoCompra"] = 0
+            else:
+                doc_limpo["anoCompra"] = 0
 
-# Estabelece a conexão com o arquivo de banco e grava os dados substituindo caso a tabela já exista
-conexao = sqlite3.connect(caminho_banco_local)
-df_pandas.to_sql(name="contratacoes_pncp", con=conexao, if_exists="replace", index=False)
-conexao.close()
+            dados_tratados.append(doc_limpo)
 
-print("🏁 Gravação concluída com sucesso!")
+        return dados_tratados
 
-# Remove as descrições de Job para limpar o contexto do Spark
-spark.sparkContext.setJobDescription(None)
+    def process_with_spark(self, dados_tratados, collection_name="PNCP"):
+        """
+        2. Inicializa o Spark de forma segura, valida o Schema estrito e converte para Pandas.
 
-print("🌐 Acesse o Spark UI em: http://localhost:4040")
-print("⌨️  Pressione ENTER no terminal para encerrar o script...")
-input()
+        Args:
+            dados_tratados (list): Lista de dicionários vindos do método 'extract_and_clean'.
+            collection_name (str, optional): Nome da coleção para batizar o processo Spark.
+                O valor padrão é "PNCP".
 
-spark.stop()
+        Returns:
+            pandas.DataFrame: DataFrame do Pandas convertido e tipado de acordo com o Schema estrito,
+                ou None se a entrada estiver vazia.
+        """
+        if not dados_tratados:
+            return None
+
+        print(
+            f"📦 {len(dados_tratados)} registos estruturados. Inicializando motor Spark..."
+        )
+        self._init_spark(collection_name)
+
+        schema_defined = StructType(
+            [
+                StructField("numeroControlePNCP", StringType(), True),
+                StructField("data_publicacao", StringType(), True),
+                StructField("descricao", StringType(), True),
+                StructField("entidade", StringType(), True),
+                StructField("linkOrigem", StringType(), True),
+                StructField("modalidade", StringType(), True),
+                StructField("municipio", StringType(), True),
+                StructField("status", StringType(), True),
+                StructField("uf", StringType(), True),
+                StructField("valor", DoubleType(), True),
+                StructField("valorTotalHomologado", DoubleType(), True),
+                StructField("anoCompra", IntegerType(), True),
+            ]
+        )
+
+        self.spark.sparkContext.setJobDescription(
+            "Ação: Processamento e amostragem de dados via Spark"
+        )
+        df = self.spark.createDataFrame(dados_tratados, schema=schema_defined)
+
+        print("🚀 Estrutura validada com sucesso pelo PySpark:")
+        df.printSchema()
+        df.show(3, truncate=True)
+
+        df_pandas = df.toPandas()
+        self.spark.sparkContext.setJobDescription(None)
+        return df_pandas
+
+    def load_to_sqlite(self, df_pandas, sqlite_db_path, sqlite_table_name):
+        """
+        3. Realiza a persistência incremental (Upsert) dinâmica no SQLite local.
+
+        Args:
+            df_pandas (pandas.DataFrame): DataFrame do Pandas retornado pelo processamento do Spark.
+            sqlite_db_path (str): Caminho absoluto de destino do arquivo do banco SQLite (ex: '/app/PNCP_LOCAL.db').
+            sqlite_table_name (str): Nome da tabela final onde os dados serão armazenados de forma incremental.
+        """
+        if df_pandas is None or df_pandas.empty:
+            print("⚠️ Sem dados para gravar no SQLite.")
+            return
+
+        print(
+            f"💾 Processando Upsert local em: {sqlite_db_path} -> Tabela: {sqlite_table_name}"
+        )
+
+        conexao = sqlite3.connect(sqlite_db_path)
+        cursor = conexao.cursor()
+
+        cursor.execute(f"""
+            CREATE TABLE IF NOT EXISTS {sqlite_table_name} (
+                numeroControlePNCP TEXT PRIMARY KEY,
+                data_publicacao TEXT,
+                descricao TEXT,
+                entidade TEXT,
+                linkOrigem TEXT,
+                modalidade TEXT,
+                municipio TEXT,
+                status TEXT,
+                uf TEXT,
+                valor REAL,
+                valorTotalHomologado REAL,
+                anoCompra INTEGER
+            )
+        """)
+
+        staging_name = f"staging_{sqlite_table_name}"
+
+        df_pandas.to_sql(
+            name=staging_name, con=conexao, if_exists="replace", index=False
+        )
+
+        cursor.execute(f"""
+            INSERT OR REPLACE INTO {sqlite_table_name} (
+                numeroControlePNCP, data_publicacao, descricao, entidade, linkOrigem, 
+                modalidade, municipio, status, uf, valor, valorTotalHomologado, anoCompra
+            )
+            SELECT 
+                numeroControlePNCP, data_publicacao, descricao, entity = entidade, linkOrigem, 
+                modalidade, municipio, status, uf, valor, valorTotalHomologado, anoCompra
+            FROM {staging_name}
+        """.replace("entity = entidade", "entidade"))
+
+        cursor.execute(f"DROP TABLE IF EXISTS {staging_name}")
+
+        conexao.commit()
+        conexao.close()
+        print(
+            f"🏁 Tabela '{sqlite_table_name}' atualizada com sucesso de forma incremental!"
+        )
+
+    def stop(self):
+        """
+        Fecha a sessão do Spark libertando os recursos do sistema.
+        """
+        if self.spark:
+            print("🛑 Encerrando a sessão do Spark de forma limpa...")
+            self.spark.stop()
+            self.spark = None
