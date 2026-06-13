@@ -107,7 +107,7 @@ Com a infraestrutura ativa, execute a orquestração para alimentar o ecossistem
 
 ```bash
 # Executa o pipeline que transiciona os dados da Camada Bronze à Camada Ouro
-docker compose exec smart-pncp python /app/orchestrate_prefect_new.py
+docker compose exec smart-pncp python /app/orchestrate_prefect.py
 
 ```
 
