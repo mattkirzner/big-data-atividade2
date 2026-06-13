@@ -1,5 +1,17 @@
 services:
-  spark:
+  prefect-server:
+    image: prefecthq/prefect:3.7.4-python3.11
+    container_name: prefect_central_server
+    entrypoint: ["prefect", "server", "start"]
+    environment:
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+      # 🎯 O SEGREDO: Força a interface web a fazer requisições para o localhost do seu Windows
+      - PREFECT_API_URL=http://localhost:4200/api
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect_data:/root/.prefect  
+  smart-pncp:
     build: .
     container_name: pyspark_container
     ports:
@@ -8,9 +20,16 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./apps:/app  # Mapeia sua pasta local de scripts para dentro do /app do container
+      - ./apps:/app
       - ./src:/src
     env_file:
-      - .env         # Passa as variáveis DB_USER, DB_PASSWORD e DB_URL para o container
+      - .env
     environment:
-      - PYTHONPATH=$PYTHONPATH:/src
+      - PYTHONPATH=/src:/app
+      # 🔌 O segredo da sincronização: Aponta o motor de execução para o servidor central
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    depends_on:
+      - prefect-server
+
+volumes:
+  prefect_data:

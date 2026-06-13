@@ -16,8 +16,6 @@ class Load:
             db_name (str): Nome do banco de dados a ser criado.
             table_name (str): Nome da tabela a ser criada no banco de dados.
         """
-        # Criar o banco e se concectar nele
-        # Criar o banco e se concectar nele
         con = sqlite3.connect(f"{db_name}.db")
         c = con.cursor()
 

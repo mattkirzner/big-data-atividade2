@@ -19,7 +19,9 @@ RUN pip install --no-cache-dir \
     streamlit \
     openai \
     fastmcp \
-    tabulate
+    tabulate \
+    groq \
+    prefect
 
 # 5. Define o diretório de trabalho padrão dentro do container
 WORKDIR /app

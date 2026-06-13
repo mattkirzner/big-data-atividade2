@@ -16,7 +16,6 @@ class Transform:
         dados_simplificados = []
 
         for item in json_bruto.get("data", []):
-            # Criamos um dicionário apenas com o essencial
             resumo = {
                 "id": item.get("numeroControlePNCP"),
                 "entidade": item.get("orgaoEntidade", {}).get("razaoSocial"),
