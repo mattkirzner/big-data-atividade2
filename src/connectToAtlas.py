@@ -59,7 +59,6 @@ class ConnectToAtlas:
         try:
             print("Iniciando processo de upload...")
 
-            # 1. Extração da lista de registros (suporta dict com chave 'data' ou lista direta)
             records = []
             if isinstance(json_content, dict):
                 records = json_content.get(
@@ -77,8 +76,6 @@ class ConnectToAtlas:
 
             operacoes = []
             for doc in records:
-                # 2. Identificação Flexível do ID
-                # Prioriza 'id' (seu dado limpo) e depois 'numeroControlePNCP' (dado bruto)
                 id_referencia = doc.get("id") or doc.get("numeroControlePNCP")
 
                 if id_referencia:
@@ -86,8 +83,7 @@ class ConnectToAtlas:
                         UpdateOne(
                             {
                                 "numeroControlePNCP": id_referencia
-                            },  # Filtro único, salva como "numenumeroControlePNCP"
-                            # para garantir compatibilidade com as outras funções
+                            },  
                             {
                                 "$set": doc,
                             },
@@ -95,10 +91,10 @@ class ConnectToAtlas:
                         )
                     )
                 else:
-                    # Log de debug para identificar registros sem identificador
+    
                     print(f"⚠️ Registro ignorado (sem ID): {str(doc)[:80]}...")
 
-            # 3. Execução em lote
+            
             if operacoes:
                 print(
                     f"Enviando {len(operacoes)} registros para {db_name}.{collection_name}..."
@@ -118,54 +114,6 @@ class ConnectToAtlas:
             print(f"Erro no upload para o Atlas: {e}")
             return None
 
-    # def upload_pncp_data(self, db_name: str, collection_name: str, json_content: dict):
-    #     """
-    #     Extrai a lista de 'data' do JSON do PNCP e faz o upload em lote para o AtlasDB.
-
-    #     Args:
-    #         db_name(str): nome do banco de dados.
-    #         collection_name(str): nome da coleção.
-    #         json_content(list[dict]): lista com os dados a serem inseridos.
-
-    #     Return:
-    #         list[dict]: uma lista com os ids inseridos.
-    #     """
-
-    #     try:
-    #         # Extraímos apenas a lista de registros
-    #         # records = json_content.get("data", [])
-
-    #         if isinstance(json_content, dict) and "data" in json_content:
-    #             records = json_content.get("data", [])
-
-    #         # Se já for uma lista (dados limpos), usamos diretamente.
-    #         elif isinstance(json_content, list):
-    #             records = json_content
-
-    #         # Caso contrário (ex: dicionário sem chave 'data'), tratamos como um único registro.
-    #         elif isinstance(json_content, dict):
-    #             records = [json_content]
-
-    #         else:
-    #             print("Formato de dados inválido.")
-    #             return None
-
-    #         if not records:
-    #             print("Nenhum registro encontrado para upload.")
-    #             return None
-
-    #         db = self.client[db_name]
-    #         collection = db[collection_name]
-
-    #         # insert_many é muito mais rápido para listas
-    #         result = collection.insert_many(records)
-
-    #         print(f"Sucesso! {len(result.inserted_ids)} documentos inseridos.")
-    #         return result.inserted_ids
-
-    #     except Exception as e:
-    #         print(f"Erro ao subir dados para o Atlas: {e}")
-    #         return None
 
     def read_data(
         self, db_name: str, collection_name: str, query: dict = None, limit: int = 0
@@ -188,7 +136,6 @@ class ConnectToAtlas:
         """
         try:
             db = self.client[db_name]
-            # O limit(0) no PyMongo retorna todos os documentos
             cursor = db[collection_name].find(query or {}).limit(limit)
             return list(cursor)
         except PyMongoError as e:
@@ -213,10 +160,8 @@ class ConnectToAtlas:
         """
         try:
             db = self.client[db_name]
-            # O filtro é fixo no identificador único
             query = {"numeroControlePNCP": pncp_id}
 
-            # Usamos update_one para garantir que apenas um registro seja afetado
             result = db[collection_name].update_one(query, {"$set": new_data})
 
             if result.matched_count > 0:
@@ -242,7 +187,6 @@ class ConnectToAtlas:
             db = self.client[db_name]
             query = {"numeroControlePNCP": pncp_id}
 
-            # delete_one é mais seguro aqui para evitar remoções em massa
             result = db[collection_name].delete_one(query)
 
             if result.deleted_count > 0:

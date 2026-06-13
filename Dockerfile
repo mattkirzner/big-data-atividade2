@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir \
     openai \
     fastmcp \
     tabulate \
-    groq
+    groq \
+    prefect
 
 # 5. Define o diretório de trabalho padrão dentro do container
 WORKDIR /app

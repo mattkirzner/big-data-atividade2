@@ -13,7 +13,7 @@ class Extract:
         data_final: str,
         codigo_modalidade_contratacao: int,
         pagina: int = 1,
-        tamanhoPagina: int = 10,
+        tamanhoPagina: int = None,
         codigo_modo_disputa: int = None,
         uf: str = None,
         codigo_municipio_ibge: str = None,
@@ -40,8 +40,9 @@ class Extract:
             "dataFinal": data_final,
             "codigoModalidadeContratacao": codigo_modalidade_contratacao,
             "pagina": pagina,
-            "tamanhoPagina": tamanhoPagina,
         }
+        if tamanhoPagina is not None:
+            params["tamanhoPagina"] = tamanhoPagina
         if codigo_modo_disputa is not None:
             params["codigoModoDisputa"] = codigo_modo_disputa
         if uf is not None:

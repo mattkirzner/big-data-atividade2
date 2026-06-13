@@ -7,10 +7,10 @@ from mcp_server import consultar_banco_pncp # Importa do servidor desacoplado
 st.set_page_config(
     page_title="Assistente PNCP Local", page_icon="🦙", layout="centered"
 )
-st.title("🦙 Chatbot Groq — Llama 3 & PNCP")
+st.title("Chatbot Smart PNCP")
 st.write("Pergunte sobre as contratações do banco usando a ultra velocidade do Groq.")
 
-# 🎯 Centralização do modelo correto para evitar falhas de execução na API
+
 MODEL_NAME = "llama-3.3-70b-versatile"
 
 client = Groq(
@@ -25,14 +25,13 @@ if "messages" not in st.session_state:
                 "Você é um analista de dados especialista em compras públicas brasileiro. Você tem acesso a um banco "
                 "de dados SQLite por meio da ferramenta 'consultar_banco_pncp'. Sempre que o usuário fizer uma pergunta "
                 "sobre os dados, você DEVE gerar a query SQL utilizando as seguintes colunas disponíveis se necessário: "
-                "[numeroControlePNCP, data_publicacao, descricao, entidade, linkOrigem, modalidade, municipio, status, uf, valor, valorTotalHomologado, anoCompra]. "
+                "[numeroControlePNCP, data_publicacao, descricao, entidade, linkOrigem, modalidade, municipio, status, uf, valor, anoCompra]. "
                 "Chame a ferramenta, analise o retorno em Markdown e formule sua resposta final em português de forma clara. "
                 "Nunca invente dados que não retornaram do banco de dados."
             ),
         }
     ]
 
-# 💡 CORREÇÃO: Filtra mensagens sem texto (como chamadas de ferramenta intermediárias) para não quebrar o Streamlit
 for message in st.session_state.messages:
     if message["role"] != "system" and message.get("content"):
         with st.chat_message(message["role"]):
@@ -46,7 +45,6 @@ if prompt := st.chat_input("Pergunte algo sobre os dados salvos..."):
     with st.chat_message("assistant"):
         response_placeholder = st.empty()
 
-        # Configuração das ferramentas seguindo a especificação do Groq
         tools = [
             {
                 "type": "function",
@@ -58,7 +56,7 @@ if prompt := st.chat_input("Pergunte algo sobre os dados salvos..."):
                         "properties": {
                             "query_sql": {
                                 "type": "string",
-                                "description": "A query SQL de leitura completa. Exemplo: SELECT entidade, valorTotalHomologado FROM contratacoes_pncp WHERE uf='PE' LIMIT 5",
+                                "description": "A query SQL de leitura completa. Exemplo: SELECT entidade, valor FROM contratacoes_pncp WHERE uf='PE' LIMIT 5",
                             }
                         },
                         "required": ["query_sql"],
@@ -84,10 +82,8 @@ if prompt := st.chat_input("Pergunte algo sobre os dados salvos..."):
 
                     st.caption(f"🔍 *Llama 3 (Groq) gerou a consulta:* `{sql_gerado}`")
 
-                    # Executa a função localmente (comportamento desacoplado)
                     resultado_banco = consultar_banco_pncp(query_sql=sql_gerado)
 
-                    # Registra a intenção da ferramenta no histórico de mensagens
                     st.session_state.messages.append(
                         {
                             "role": "assistant",
@@ -105,7 +101,6 @@ if prompt := st.chat_input("Pergunte algo sobre os dados salvos..."):
                         }
                     )
 
-                    # Registra o retorno real do banco de dados
                     st.session_state.messages.append(
                         {
                             "role": "tool",
@@ -115,7 +110,6 @@ if prompt := st.chat_input("Pergunte algo sobre os dados salvos..."):
                         }
                     )
 
-                    # 💡 CORREÇÃO CRÍTICA: Utiliza o MODEL_NAME correto em vez de "llama3.1" para evitar o erro 404
                     segunda_resposta = client.chat.completions.create(
                         model=MODEL_NAME, 
                         messages=st.session_state.messages

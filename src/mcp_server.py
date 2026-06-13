@@ -3,10 +3,8 @@ import sqlite3
 import pandas as pd
 from fastmcp import FastMCP
 
-# Inicializa o servidor MCP dedicado ao PNCP
 mcp = FastMCP("PNCP Data Server")
 
-# 🔌 DESACOPLAMENTO: Configurações injetadas via variáveis de ambiente
 DB_PATH = os.getenv("SQLITE_DB_PATH", "/app/PNCP_LOCAL.db")
 TABLE_NAME = os.getenv("SQLITE_TABLE_NAME", "contratacoes_pncp")
 
@@ -27,10 +25,8 @@ def consultar_banco_pncp(query_sql: str) -> str:
     - status (TEXT) -> Situação cadastral do processo (ex: Homologado)
     - uf (TEXT) -> Estado/Unidade Federativa (Sigla de 2 letras, ex: PE, SP)
     - valor (REAL) -> Valor base registrado
-    - valorTotalHomologado (REAL) -> Valor total final homologado
     - anoCompra (INTEGER) -> Ano calendário extraído do processo
     """
-    # Proteção simples contra comandos de escrita
     query_lower = query_sql.lower()
     if any(
         keyword in query_lower
@@ -51,5 +47,4 @@ def consultar_banco_pncp(query_sql: str) -> str:
 
 
 if __name__ == "__main__":
-    # Inicia o servidor em modo de desenvolvimento/produção do FastMCP
     mcp.run()
